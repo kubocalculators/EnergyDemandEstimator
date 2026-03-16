@@ -7,7 +7,7 @@ This script contains all helper functions needed for web app user interface
 
 import pandas as pd
 import numpy as np
-import openpyxl
+
 
 def prepare_weather_df(
     upload,
@@ -50,3 +50,75 @@ def prepare_weather_df(
 
     return df
     
+def call_crop_temp_and_rh_setRanges(crop_name):
+    
+    crop_df = pd.read_excel("CropData.xlsx")
+
+    # Raise an error if the file has been changed and therefore cannot be referenced
+    required = [
+        "Crop",
+        "Reference",
+        "Variety",
+        "Day_Temp_Min (degC)",
+        "Day_Temp_Max (degC)",
+        "Night_Temp_Min (degC)",
+        "Night_Temp_Max (deg C)",
+        "Day_RH_Min (%)",
+        "Day_RH_Max (%)",
+        "Night_RH_Min (%)",
+        "Night_RH_Max (%)"
+        ]
+    missing = [c for c in required if c not in crop_df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # Select the row matching the crop
+    crop_df = crop_df.set_index("Crop")
+    row = crop_df.loc[crop_name]
+
+    # Retrieve values from that row
+    reference = row["Reference"]
+    variety = row["Variety"]
+    day_min_temp = row["Day_Temp_Min (degC)"]
+    day_max_temp = row["Day_Temp_Max (degC)"]
+    night_min_temp = row["Night_Temp_Min (degC)"]
+    night_max_temp = row["Night_Temp_Max (deg C)"]
+    day_min_rh = row["Day_RH_Min (%)"]
+    day_max_rh = row["Day_RH_Max (%)"]
+    night_min_rh = row["Night_RH_Min (%)"]
+    night_max_rh = row["Night_RH_Max (%)"]
+
+    # Calculate average temperatures
+    day_avg_temp = 0.5*(day_min_temp + day_max_temp)
+    night_avg_temp = 0.5*(night_min_temp + night_max_temp)
+    day_avg_rh = 0.5*(day_min_rh + day_max_rh)
+    night_avg_rh = 0.5*(night_min_rh + night_max_rh)
+
+    return reference, variety, day_min_temp, day_max_temp, night_min_temp, night_max_temp, day_min_rh, day_max_rh, night_min_rh, night_max_rh, day_avg_temp, night_avg_temp, day_avg_rh, night_avg_rh
+
+def airflowrate_perAHU_m3h(truss_length, trolley, AHU_count_pertruss):                   
+
+    # Calcualte width available for the AHU fan
+    trolley_width = 771 if trolley == "Standard (771mm)" else 0
+    AHU_max_width = ( truss_length - (AHU_count_pertruss - 1) * trolley_width ) / AHU_count_pertruss
+
+    # Read AHU table
+    AHU_df = pd.read_excel("AHU_types_capacities.xlsx")
+
+    # Force datatype to be numeric
+    AHU_df["DADH_outside_diameter_mm"] = pd.to_numeric(AHU_df["DADH_outside_diameter_mm"], errors="coerce")
+    AHU_df["ventilation_capacity_m3perh"] = pd.to_numeric(AHU_df["ventilation_capacity_m3perh"], errors="coerce")
+
+    # Select the row for the fan with largest possible diameter
+    candidates = AHU_df.loc[AHU_df["DADH_outside_diameter_mm"] <= AHU_max_width].dropna(subset=["DADH_outside_diameter_mm"])
+    if candidates.empty:
+        raise ValueError(
+            f" No AHU fit this configuration."
+        )
+    
+    # Call the ventilation capacity from the table
+    best_row = candidates.loc[candidates["DADH_outside_diameter_mm"].idxmax()]
+    airflow_rate = best_row["ventilation_capacity_m3perh"]
+    AHU_type = best_row["AHU_type"]
+
+    return AHU_type, airflow_rate
