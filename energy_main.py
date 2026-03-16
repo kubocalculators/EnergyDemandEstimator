@@ -6,7 +6,7 @@ This script runs the web app user interface
 
 import streamlit as st
 import pandas as pd
-from helpers import prepare_weather_df, call_crop_temp_and_rh_setRanges, airflowrate_perAHU_m3h
+from helpers_v2 import prepare_weather_df, call_crop_temp_and_rh_setRanges, airflowrate_perAHU_m3h
 import active_cooling_v2
 import heating_v1
 import info_page_v2
