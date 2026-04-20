@@ -6,7 +6,7 @@ This script runs the web app user interface
 
 import streamlit as st
 import pandas as pd
-from helpers_v2 import prepare_weather_df, call_crop_temp_and_rh_setRanges, airflowrate_perAHU_m3h
+from helpers_v3 import prepare_weather_df, call_cropData, airflowrate_perAHU_m3h, output_excel
 import active_cooling_v2
 import heating_v1
 import info_page_v2
@@ -20,16 +20,17 @@ crop_list = [
     "CUCUMBER - LONG ENGLISH, traditional",
     "CUCUMBER - SNACK/MINI, high wire",
     "CUCUMBER - SNACK/MINI, traditional",
-    "STRAWBERRY",
+    "ROSES",
+    "STRAWBERRY - EVERBEARING",
+    "STRAWBERRY - JUNE BEARING",
     "LETTUCE, baby leaf",
-    "LETTUCE, teen leaf (direct seeding)",
+    "LETTUCE, baby/teen leaf (direct seeding)",
     "LETTUCE, teen leaf (transplanted)",
     "LETTUCE, whole head (medium)",
     "LETTUCE, whole head (large)",
     "SWEET POINT PEPPER",
     "BELL PEPPER"
 ]
-
 st.sidebar.title("Navigation")
 
 page = st.sidebar.radio("Go to:", ["Calculator","Info"], index=0)
@@ -58,7 +59,7 @@ if page == "Calculator":
     # Upload crop data
     st.header("Upload Crop Data")
     crop_name = st.selectbox(":red[**Select Crop**]", crop_list)
-    reference, variety, day_min_temp, day_max_temp, night_min_temp, night_max_temp, day_min_rh, day_max_rh, night_min_rh, night_max_rh, day_avg_temp, night_avg_temp, day_avg_rh, night_avg_rh = call_crop_temp_and_rh_setRanges(crop_name)
+    reference, variety, day_min_temp, day_max_temp, night_min_temp, night_max_temp, day_min_rh, day_max_rh, night_min_rh, night_max_rh, day_opt_temp, night_opt_temp, day_opt_rh, night_opt_rh = call_cropData(crop_name)
 
     st.markdown("*Temperature and RH ranges will populate with crop selection.*")
     # Display the default values, they can be overwritten
@@ -78,11 +79,11 @@ if page == "Calculator":
         
         st.subheader("Climate Setpoints")
         # Take in crop parameters
-        st.markdown("*Default values are average between min/max ranges.*")
-        t_day = st.number_input("Day Temperature Setpoint (C)", value=day_avg_temp)
-        t_night = st.number_input("Night Temperature Setpoint (C)", value=night_avg_temp)
-        rh_day = st.number_input("Day RH Setpoint (%)", 0.0, 100.0, value=day_avg_rh)
-        rh_night = st.number_input("Night RH Setpoint (%)", 0.0, 100.0, value=night_avg_rh)
+        st.markdown("*If optimal values are not available in the database, setpoint values are average of the min/max ranges.*")
+        t_day = st.number_input("Day Temperature Setpoint (C)", value=day_opt_temp)
+        t_night = st.number_input("Night Temperature Setpoint (C)", value=night_opt_temp)
+        rh_day = st.number_input("Day RH Setpoint (%)", 0.0, 100.0, value=day_opt_rh)
+        rh_night = st.number_input("Night RH Setpoint (%)", 0.0, 100.0, value=night_opt_rh)
 
         st.subheader("Greenhouse Parameters")
         col11, col12 = st.columns(2)
@@ -105,6 +106,8 @@ if page == "Calculator":
         st.subheader("Select Calculation Methods")
         cooling_method = st.selectbox("Active Cooling Load Method", ["Maximum Allowed Temperature and Unlimited RH", "True Temperature and RH Setpoints"])
         heating_method = st.selectbox("Heating Load Method", ["Minimum Allowed Temperature", "True Setpoint"])
+        st.markdown("**Heat Storage Tank**")
+        st.markdown("HST volume is calculated based on the number of hours of heat stored at the heat load for the selected demand percentile.")
         hours_of_heat_storage = st.number_input("Hours of Heat Storage", value=8, step=1)
         peak_percentile = st.selectbox("Peak Demand Percentile", [95, 92.5, 90, 85])
 
@@ -135,21 +138,20 @@ if page == "Calculator":
         AHU_count = AHU_count_pertruss * truss_count
         area_m2 = truss_length / 1000 / AHU_count_pertruss * airtube_length
         AHU_type, airflow_m3_h = airflowrate_perAHU_m3h(truss_length, trolley_selection, AHU_count_pertruss)
-    
-    # Run heating load calculation
 
+    # Run heating load calculation
+        
         if heating_method == "True Setpoint":
             heating_target = "T_set_C"
         else:
             heating_target = "T_min_C"
 
         heating_df = heating_v1.build_hourly_heating_df_TWO_OPTIONS(weather_df, scr1_eff, scr2_eff, heating_target)
-        
         heating_results = heating_v1.heating_load_percentile_summary(heating_df, area_m2, AHU_count)
+        demand_MW = heating_results.loc[peak_percentile, "Total Heating (MW)"]
+        HST_volume_m3 = heating_v1.HST_volume(hours_of_heat_storage,demand_MW)
         
         st.success("Heating model completed.")
-
-
 
     # Run active cooling load calculation
         cooling_df = active_cooling_v2.build_hourly_padwall_activecool_df_TWO_OPTIONS(weather_df, airflow_m3_h, area_m2)
@@ -162,24 +164,64 @@ if page == "Calculator":
         cooling_results = active_cooling_v2.cooling_load_percentile_summary(cooling_df, area_m2, AHU_count, load_col)
         st.success("Active cooling model completed.")
 
-
+    # Collect inputs into a dictionary
+        user_inputs = {
+            "Crop": {
+                "Crop Name": crop_name,
+                "Day Temp Min": tmin_day,
+                "Day Temp Max": tmax_day,
+                "Night Temp Min": tmin_night,
+                "Night Temp Max": tmax_night,
+                "Day Temp Setpoint": t_day,
+                "Night Temp Setpoint": t_night,
+                "Day RH Setpoint": rh_day,
+                "Night RH Setpoint": rh_night,
+                "Day RH Max": rh_cap_day,
+                "Night RH Max": rh_cap_night,
+            },
+            "Greenhouse": {
+                "Truss Count": truss_count,
+                "Truss Length (mm)": truss_length,
+                "AHU per Truss": AHU_count_pertruss,
+                "Total AHU Count": AHU_count,
+                "Air Tube Length (m)": airtube_length,
+                "Cladding Ratio": cladd,
+                "U_leak": u_leak,
+                "U_roof": u_roof,
+                "Screen 1 Eff (%)": scr1_eff,
+                "Screen 2 Eff (%)": scr2_eff,
+                "Trolley": trolley_selection,
+            },
+            "Methods": {
+                "Cooling Method": cooling_method,
+                "Heating Method": heating_method,
+            },
+            "HST": {
+                "Hours of Storage": hours_of_heat_storage,
+                "Peak Percentile": peak_percentile,
+                "Recommended Volume (m3)": HST_volume_m3,
+            }
+        }
 
 # ---------- STEP 3: Format the outputs of each calculation ---------- #
         st.subheader("Heating Load Percentile Summary")
-        st. dataframe(heating_results)
-
-        demand_MW = heating_results.loc[peak_percentile, "Total Heating (MW)"]
-        HST_volume_m3 = heating_v1.HST_volume(hours_of_heat_storage,demand_MW)
+        st.dataframe(heating_results)
         st.markdown(
             f"**Recommended HST volume:** {HST_volume_m3:,.0f} m³ to store {hours_of_heat_storage} hours of heat."
         )
-
-
         st.subheader("Cooling Load Percentile Summary")
         st.dataframe(cooling_results)
         st.markdown(f"AHU type **{AHU_type}** was selected and has a max ventilation rate of **{airflow_m3_h} m3/h**")
+    
+        # --- Format to Excel and allow download --- #
+        excel_file = output_excel(user_inputs, heating_results, cooling_results)
+        st.download_button(
+            label="Download Results as Excel",
+            data=excel_file,
+            file_name="energy_model_results.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
 elif page == "Info":
     info_page_v2.render()
-
 
