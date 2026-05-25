@@ -82,8 +82,8 @@ if page == "Calculator":
         st.markdown("*If optimal values are not available in the database, setpoint values are average of the min/max ranges.*")
         t_day = st.number_input("Day Temperature Setpoint (C)", value=day_opt_temp)
         t_night = st.number_input("Night Temperature Setpoint (C)", value=night_opt_temp)
-        rh_day = st.number_input("Day RH Setpoint (%)", 0.0, 100.0, value=day_opt_rh)
-        rh_night = st.number_input("Night RH Setpoint (%)", 0.0, 100.0, value=night_opt_rh)
+        rh_day = st.number_input("Day RH Setpoint (%)", 0, 100, value=day_opt_rh)
+        rh_night = st.number_input("Night RH Setpoint (%)", 0, 100, value=night_opt_rh)
 
         st.subheader("Greenhouse Parameters")
         col11, col12 = st.columns(2)
