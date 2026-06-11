@@ -11,7 +11,7 @@ from helpers_v3 import prepare_weather_df, call_cropData, airflowrate_perAHU_m3h
 import active_cooling_v2
 import heating_v1
 import info_page_v2
-import shade_selector
+# import shade_selector
 
 eta = 0.8   # This is the maximum allowable padwall efficiency
 crop_list = [
