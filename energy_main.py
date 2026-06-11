@@ -1,3 +1,4 @@
+
 """
 
 This script runs the web app user interface
@@ -10,6 +11,7 @@ from helpers_v3 import prepare_weather_df, call_cropData, airflowrate_perAHU_m3h
 import active_cooling_v2
 import heating_v1
 import info_page_v2
+import shade_selector
 
 eta = 0.8   # This is the maximum allowable padwall efficiency
 crop_list = [
@@ -33,6 +35,7 @@ crop_list = [
 ]
 st.sidebar.title("Navigation")
 
+# page = st.sidebar.radio("Go to:", ["Calculator","Info", "Shade Selector Tool"], index=0)
 page = st.sidebar.radio("Go to:", ["Calculator","Info"], index=0)
 
 with st.sidebar:
@@ -105,11 +108,11 @@ if page == "Calculator":
 
         st.subheader("Select Calculation Methods")
         cooling_method = st.selectbox("Active Cooling Load Method", ["Maximum Allowed Temperature and Unlimited RH", "True Temperature and RH Setpoints"])
-        heating_method = st.selectbox("Heating Load Method", ["Minimum Allowed Temperature", "True Setpoint"])
+        heating_method = st.selectbox("Heating Load Method", ["True Setpoint", "Minimum Allowed Temperature"])
         st.markdown("**Heat Storage Tank**")
         st.markdown("HST volume is calculated based on the number of hours of heat stored at the heat load for the selected demand percentile.")
         hours_of_heat_storage = st.number_input("Hours of Heat Storage", value=8, step=1)
-        peak_percentile = st.selectbox("Peak Demand Percentile", [95, 92.5, 90, 85])
+        peak_percentile = st.selectbox("Peak Demand Percentile", [98, 95, 92.5, 90, 85])
 
         run = st.form_submit_button("Calculate")
 
@@ -205,11 +208,13 @@ if page == "Calculator":
 
 # ---------- STEP 3: Format the outputs of each calculation ---------- #
         st.subheader("Heating Load Percentile Summary")
+        st.caption("For conceptual design, report the 98th to 1.1x98th percentile to cover both the GH and SA heating reuqirements.")
         st.dataframe(heating_results)
         st.markdown(
             f"**Recommended HST volume:** {HST_volume_m3:,.0f} m³ to store {hours_of_heat_storage} hours of heat."
         )
         st.subheader("Cooling Load Percentile Summary")
+        st.caption("For conceptual design, report the 92.5 - 95th percentile range. Screens, ventilation, and fogging can make up the difference on the hottest days.")
         st.dataframe(cooling_results)
         st.markdown(f"AHU type **{AHU_type}** was selected and has a max ventilation rate of **{airflow_m3_h} m3/h**")
     
@@ -225,3 +230,5 @@ if page == "Calculator":
 elif page == "Info":
     info_page_v2.render()
 
+# elif page == "Shade Selector Tool":
+#     shade_selector.render()
